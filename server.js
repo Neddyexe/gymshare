@@ -4,20 +4,54 @@ import "dotenv/config";
 import path from "path";
 
 const app = express();
+const ROOT = process.cwd();
 
 app.use(express.json({ limit: "200kb" }));
 
-// Serve the files directly from the repository root
-app.use(express.static(process.cwd()));
+
+// ------------------------------------------------
+// FRONTEND FILES
+// ------------------------------------------------
 
 app.get("/", (req, res) => {
-  res.sendFile(
-    path.join(
-      process.cwd(),
-      "index.html"
-    )
-  );
+  res.sendFile(path.join(ROOT, "index.html"));
 });
+
+app.get("/styles.css", (req, res) => {
+  res.type("text/css");
+  res.sendFile(path.join(ROOT, "styles.css"));
+});
+
+app.get("/app.js", (req, res) => {
+  res.type("application/javascript");
+  res.sendFile(path.join(ROOT, "app.js"));
+});
+
+app.get("/manifest.webmanifest", (req, res) => {
+  res.type("application/manifest+json");
+  res.sendFile(path.join(ROOT, "manifest.webmanifest"));
+});
+
+app.get("/sw.js", (req, res) => {
+  res.type("application/javascript");
+  res.set("Cache-Control", "no-store");
+  res.sendFile(path.join(ROOT, "sw.js"));
+});
+
+app.get("/icon-192.png", (req, res) => {
+  res.type("image/png");
+  res.sendFile(path.join(ROOT, "icon-192.png"));
+});
+
+app.get("/icon-512.png", (req, res) => {
+  res.type("image/png");
+  res.sendFile(path.join(ROOT, "icon-512.png"));
+});
+
+
+// ------------------------------------------------
+// GROQ AI
+// ------------------------------------------------
 
 const groq = process.env.GROQ_API_KEY
   ? new OpenAI({
@@ -26,76 +60,103 @@ const groq = process.env.GROQ_API_KEY
     })
   : null;
 
+
 const COACH = `
 You are Gym Chat Personal, a personalised fitness coach.
 
-Your job is to create and adapt training around the user's own profile,
-goals, experience, available equipment, training frequency, and preferences.
+Build and adapt training around the user's individual profile,
+goals, experience, equipment, schedule and preferences.
 
 Priorities:
-- safe, clean technique
+- safe technique
 - sensible progression
-- hypertrophy and strength where appropriate
+- strength and muscle development where appropriate
 - conditioning where appropriate
 - recovery
-- concise coaching
 - one clear next action at a time
 
-Use the supplied profile as context.
+Use the supplied user profile as important context.
+
+Be gender-neutral unless the user explicitly tells you otherwise.
+
+Never assume someone's goals based on gender.
 
 Do not diagnose medical conditions.
-Do not encourage training through dangerous pain or reckless maxing.
 
-Be supportive, specific, and practical.
+Do not encourage training through dangerous pain,
+injury symptoms or reckless max attempts.
+
+Be concise, supportive and practical.
 `;
 
+
 app.post("/api/coach", async (req, res) => {
+
   try {
+
     if (!groq) {
+
       return res.status(503).json({
         error: "GROQ_API_KEY not configured"
       });
+
     }
 
     const payload = req.body || {};
 
+
     const response = await groq.responses.create({
+
       model: "openai/gpt-oss-120b",
 
       instructions: COACH,
 
       input: `
-User profile:
-${JSON.stringify(payload.profile || {})}
+USER PROFILE
+${JSON.stringify(payload.profile || {}, null, 2)}
 
-Training state:
-${JSON.stringify(payload.state || {})}
+TRAINING STATE
+${JSON.stringify(payload.state || {}, null, 2)}
 
-User:
+USER MESSAGE
 ${String(payload.message || "")}
       `
+
     });
+
 
     res.json({
+
       text:
         response.output_text ||
-        "Tell me what you want to work on today."
+        "Tell me what you would like to work on today."
+
     });
 
+
   } catch (err) {
+
     console.error("Groq error:", err);
 
     res.status(500).json({
       error: "Coach request failed"
     });
+
   }
+
 });
 
-const port =
-  process.env.PORT || 3000;
+
+// ------------------------------------------------
+// SERVER
+// ------------------------------------------------
+
+const port = process.env.PORT || 3000;
 
 app.listen(port, () => {
+
   console.log(
     `Gym Chat Personal running on http://localhost:${port}`
   );
+
 });
