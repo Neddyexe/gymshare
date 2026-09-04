@@ -6,13 +6,14 @@ import path from "path";
 const app = express();
 
 app.use(express.json({ limit: "200kb" }));
-app.use(express.static("public"));
+
+// Serve the files directly from the repository root
+app.use(express.static(process.cwd()));
 
 app.get("/", (req, res) => {
   res.sendFile(
     path.join(
       process.cwd(),
-      "public",
       "index.html"
     )
   );
